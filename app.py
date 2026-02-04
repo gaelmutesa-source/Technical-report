@@ -5,127 +5,110 @@ from fpdf import FPDF
 import tempfile
 import os
 
-# --- 1. PDF GENERATOR (UPDATED FOR FUNDING ARGUMENT) ---
-def create_pdf(lab_name, report_text, fig_bar, fig_line, fig_pie, funding_text):
+# --- PDF GENERATOR (UPDATED FOR NATIONAL SUMMARY) ---
+def create_pdf(mode, lab_name, report_text, fig_bar, fig_line, fig_pie, funding_text):
     pdf = FPDF()
     pdf.add_page()
+    title = f"National Metrology Impact Report (2025/26)" if mode == "National" else f"Lab Technical Report: {lab_name}"
     
-    # Header
     pdf.set_font("Arial", "B", 16)
-    pdf.cell(0, 10, f"Technical Report: {lab_name} Impact Analysis (2025-2026)", ln=True, align='C')
+    pdf.cell(0, 10, title, ln=True, align='C')
     pdf.ln(10)
     
-    # Section 1: Economic Narrative
     pdf.set_font("Arial", "B", 12)
-    pdf.cell(0, 10, "1. Economic Contribution Narrative", ln=True)
+    pdf.cell(0, 10, "1. Executive Economic Summary", ln=True)
     pdf.set_font("Arial", "", 11)
     pdf.multi_cell(0, 7, report_text)
     
-    # Main Chart
-    tmp_bar = "tmp_bar.png"
+    # Save chart 1
+    tmp_bar = f"bar_{mode}.png"
     fig_bar.savefig(tmp_bar, bbox_inches='tight')
     pdf.image(tmp_bar, x=15, y=None, w=170)
     os.remove(tmp_bar)
     
-    # Section 2: Funding Justification (World Bank Focus)
     pdf.add_page()
     pdf.set_font("Arial", "B", 12)
-    pdf.cell(0, 10, "2. Strategic Funding Justification (Stakeholder View)", ln=True)
+    pdf.cell(0, 10, "2. Strategic Stakeholder Case", ln=True)
     pdf.set_font("Arial", "I", 11)
     pdf.multi_cell(0, 7, funding_text)
-    pdf.ln(5)
     
-    # Secondary Charts
-    tmp_line = "tmp_line.png"
-    fig_line.savefig(tmp_line, bbox_inches='tight')
-    pdf.image(tmp_line, x=10, y=None, w=90)
-    os.remove(tmp_line)
-    
-    tmp_pie = "tmp_pie.png"
+    tmp_pie = f"pie_{mode}.png"
     fig_pie.savefig(tmp_pie, bbox_inches='tight')
-    pdf.image(tmp_pie, x=110, y=105, w=85)
+    pdf.image(tmp_pie, x=50, y=None, w=110)
     os.remove(tmp_pie)
         
     return pdf.output(dest='S').encode('latin-1')
 
-# --- 2. MAIN APP ---
 def main():
-    st.title("🇷🇼 RSB Metrology Economic Impact Portal")
+    st.set_page_config(page_title="RSB National Metrology Portal", layout="wide")
+    st.title("🇷🇼 RSB National Metrology Impact Portal")
     
-    # --- SIDEBAR: NAVIGATION & LAB SELECTION ---
-    st.sidebar.header("Global Configuration")
-    target_lab = st.sidebar.selectbox("Select Target Laboratory", ["Dosimetry", "Mass", "Volume", "Thermometry"])
+    # --- NAVIGATION ---
+    mode = st.sidebar.radio("Reporting Mode", ["Individual Lab", "National Summary"])
     
-    uploaded_file = st.sidebar.file_uploader(f"Upload {target_lab} Lab Data (Excel)", type=["xlsx"])
+    if mode == "Individual Lab":
+        target_lab = st.sidebar.selectbox("Select Laboratory", ["Dosimetry", "Mass", "Volume", "Thermometry"])
+    else:
+        target_lab = "National Metrology Division"
+
+    uploaded_file = st.sidebar.file_uploader(f"Upload {target_lab} Data (Excel)", type=["xlsx"])
 
     if uploaded_file:
         df = pd.read_excel(uploaded_file)
-        rev_current = df['Revenue_2025'].sum()
-        rev_previous = df['Revenue_2024'].sum()
+        rev_2025 = df['Revenue_2025'].sum()
+        rev_2024 = df['Revenue_2024'].sum()
         
-        # Adjustable Benchmarks
-        st.sidebar.subheader("Strategic Benchmarks")
-        logistics_savings = st.sidebar.number_input("Logistics Savings (RWF)", value=15000000.0)
-        assets_value = st.sidebar.number_input("Value of Supported Infrastructure (RWF)", value=12500000000.0)
-        sector_gdp = st.sidebar.number_input("Sector GDP Contribution (RWF)", value=80000000000.0)
-        certified_exports = st.sidebar.number_input("Export Value Enabled (RWF)", value=850000000.0)
-        total_exports = st.sidebar.number_input("Total Sector Exports (RWF)", value=5000000000.0)
+        # Benchmarks
+        logistics_saved = st.sidebar.number_input("Total Logistics Saved (RWF)", value=50000000.0 if mode=="National" else 15000000.0)
+        infra_value = st.sidebar.number_input("Value of Assets Supported (RWF)", value=150000000000.0 if mode=="National" else 12500000000.0)
+        sector_gdp = st.sidebar.number_input("Total Sector GDP (RWF)", value=500000000000.0 if mode=="National" else 80000000000.0)
 
-        # GDP Calculations
-        dvr = ((rev_current + logistics_savings) / (rev_current + (logistics_savings * 1.5))) * 100
-        ici = (assets_value / sector_gdp) * 100
-        growth = ((rev_current - rev_previous) / rev_previous) * 100
-        eef = (certified_exports / total_exports) * 100
+        # Core Calculations
+        dvr = ((rev_2025 + logistics_saved) / (rev_2025 + (logistics_saved * 1.5))) * 100
+        growth = ((rev_2025 - rev_2024) / rev_2024) * 100
+        criticality = (infra_value / sector_gdp) * 100
 
-        # --- DASHBOARD LAYOUT ---
-        st.subheader(f"Dashboard: {target_lab} Laboratory Performance")
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Domestic Retention", f"{dvr:.1f}%")
-        m2.metric("Criticality Index", f"{ici:.1f}%")
-        m3.metric("Growth Momentum", f"{growth:.1f}%", delta=f"{growth:.1f}%")
-        m4.metric("Export Gatekeeper", f"{eef:.1f}%")
+        # --- DASHBOARD ---
+        st.subheader(f"{target_lab} Impact Dashboard")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Domestic Retention", f"{dvr:.1f}%")
+        c2.metric("YoY Growth", f"{growth:.1f}%")
+        c3.metric("GDP Criticality", f"{criticality:.1f}%")
 
-        st.divider()
-
-        # Visuals
-        col_main, col_side = st.columns([2, 1])
-        with col_main:
-            st.write("#### Total Economic Value Created")
-            fig_bar, ax_bar = plt.subplots(figsize=(8, 4))
-            ax_bar.bar(['Direct Rev', 'Logistics Saved', 'Export Enabled'], [rev_current, logistics_savings, certified_exports], color='#004C99')
+        # --- VISUALS ---
+        col_l, col_r = st.columns(2)
+        with col_l:
+            fig_bar, ax_bar = plt.subplots(figsize=(7, 4))
+            # If National, show revenue by Lab. If Individual, show total.
+            if mode == "National" and 'Lab_Name' in df.columns:
+                lab_revs = df.groupby('Lab_Name')['Revenue_2025'].sum()
+                lab_revs.plot(kind='bar', ax=ax_bar, color='#1f77b4')
+                ax_bar.set_title("Revenue Contribution per Laboratory")
+            else:
+                ax_bar.bar(['2024', '2025'], [rev_2024, rev_2025], color=['#aec7e8', '#1f77b4'])
+                ax_bar.set_title("Annual Revenue Momentum")
             st.pyplot(fig_bar)
 
-        with col_side:
-            st.write("#### Revenue by Sector")
+        with col_r:
             fig_pie, ax_pie = plt.subplots(figsize=(5, 5))
-            sector_data = df.groupby('Client_Sector')['Revenue_2025'].sum()
-            ax_pie.pie(sector_data, labels=sector_data.index, autopct='%1.1f%%', colors=['#008080', '#DAA520', '#B22222'])
+            group_col = 'Lab_Name' if (mode == "National" and 'Lab_Name' in df.columns) else 'Client_Sector'
+            sector_data = df.groupby(group_col)['Revenue_2025'].sum()
+            ax_pie.pie(sector_data, labels=sector_data.index, autopct='%1.1f%%', colors=['#2ca02c', '#ff7f0e', '#d62728', '#9467bd'])
+            ax_pie.set_title("Economic Distribution")
             st.pyplot(fig_pie)
 
-        st.write("#### Historical Value Momentum")
-        fig_line, ax_line = plt.subplots(figsize=(10, 2))
-        ax_line.plot(["2024", "2025"], [rev_previous, rev_current], marker='s', color='#B22222')
-        st.pyplot(fig_line)
-
-        # --- FUNDING ARGUMENT (WORLD BANK LOGIC) ---
-        report_text = f"The {target_lab} Lab provides a Domestic Value Retention of {dvr:.1f}%. It safeguards {assets_value:,.0f} RWF in infrastructure assets."
-        
+        # --- WORLD BANK ARGUMENT ---
         funding_text = (
-            f"STRATEGIC CASE FOR FUNDING: \n"
-            f"The {target_lab} laboratory currently supports {ici:.1f}% of the targeted sector's national infrastructure. "
-            f"Every 1 RWF invested in this lab protects approximately {assets_value/rev_current:.0f} RWF of active economic assets. "
-            f"Lack of further investment will increase 'Quality Leakage' and force Rwandan industries to seek foreign alternatives, "
-            f"harming the national Balance of Payments."
+            f"The {target_lab} currently underpins {criticality:.1f}% of the sectors it serves. "
+            f"By domesticating these standards, RSB prevents a 'Quality Leakage' where local firms "
+            f"would otherwise spend foreign currency abroad. Our current Asset-to-Revenue ratio shows "
+            f"that for every 1 RWF in lab fees, we protect {infra_value/rev_2025:.0f} RWF of Rwandan infrastructure."
         )
+        st.info(funding_text)
 
-        st.success("World Bank Funding Logic Generated Based on Data.")
-        st.write(funding_text)
-
-        # Download
-        pdf_data = create_pdf(target_lab, report_text, fig_bar, fig_line, fig_pie, funding_text)
-        st.download_button("📥 Download Technical Report + Funding Case", pdf_data, f"RSB_{target_lab}_Stakeholder_Report.pdf", "application/pdf")
-    else:
-        st.info(f"Please upload the {target_lab} Excel data file to generate analysis.")
+        # PDF Download
+        pdf_data = create_pdf(mode, target_lab, f"Summary of impact for {target_lab}.", fig_bar, fig_bar, fig_pie, funding_text)
+        st.download_button("📥 Download PDF Report", pdf_data, f"RSB_{mode}_Report.pdf", "application/pdf")
 
 if __name__ == "__main__":
     main()
